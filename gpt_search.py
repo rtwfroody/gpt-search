@@ -1,5 +1,6 @@
 #!/bin/env python3
 
+from bs4 import BeautifulSoup
 from duckduckgo_search import ddg
 from joblib import Memory
 from pprint import pprint
@@ -8,6 +9,7 @@ import datetime
 import json
 import openai
 import os
+import requests
 import sys
 import tiktoken
 
@@ -76,15 +78,12 @@ def ddg_top_hit(topic):
     for result in results:
         if args.verbose:
             print("  Fetching", result['href'])
-        content = fetch_url_and_extract_text(result['href'])
+        (title, content) = fetch_url_and_extract_info(result['href'])
         if content:
-            return content
-
-import requests
-from bs4 import BeautifulSoup
+            return (result['href'], title, content)
 
 @memory.cache
-def fetch_url_and_extract_text(url):
+def fetch_url_and_extract_info(url):
     try:
         # Fetch the URL
         response = requests.get(url)
@@ -96,14 +95,15 @@ def fetch_url_and_extract_text(url):
 
             # Extract the text from the HTML
             text = ' '.join(soup.stripped_strings)
+            title = soup.title.string
 
-            return text
+            return (title, text)
         else:
             print(f"Error fetching {url}: {response.status_code}")
-            return None
+            return (None, None)
     except Exception as e:
-        print(f"Error fetching URL: {e}")
-        return None
+        print(f"Error fetching {url}: {e}")
+        return (None, None)
 
 args = None
 def main():
@@ -131,8 +131,11 @@ def main():
     search_text = gpt(search_prompt)
     searches = json.loads(search_text)
     background = {}
+    sources = []
     for search in searches:
-        background[search] = ddg_top_hit(search)
+        source, title, content = ddg_top_hit(search)
+        background[search] = content
+        sources.append((source, title))
 
     if args.verbose:
         pprint(("fetched:", {search : len(content) for search, content in background.items()}))
@@ -146,6 +149,10 @@ def main():
         gpt(f"{background_text(background)}\n\n{today_prompt}\n\n{args.question}")
     )
     print(f"({args.model}, {gpt_query_count} queries)")
+    print()
+    print("Sources:")
+    for source, title in sources:
+        print(f"* [{title}]({source})")
 
 if __name__ == "__main__":
     sys.exit(main())
