@@ -1,18 +1,18 @@
 #!/bin/env python3
 
-import argparse
-import openai
-import os
-import re
-import sys
-import tiktoken
-import json
 from duckduckgo_search import ddg
 from joblib import Memory
 from pprint import pprint
+import argparse
+import datetime
+import json
+import openai
+import os
+import sys
+import tiktoken
 
 cachedir = os.path.join(os.path.dirname(__file__), ".cache")
-memory = Memory(cachedir)
+memory = Memory(cachedir, verbose=0)
 
 max_token_count = {
     "gpt-4": 8192,
@@ -22,9 +22,13 @@ max_token_count = {
 # Set up the OpenAI API client
 openai.api_key = os.environ.get("OPENAI_API_KEY")
 
+gpt_query_count = 0
 @memory.cache
 def gpt(prompt, model=None):
     assert len(prompt) > 25
+
+    global gpt_query_count
+    gpt_query_count += 1
 
     response = openai.ChatCompletion.create(
         model=model or args.model,
@@ -59,20 +63,22 @@ def summarize(background):
             continue
         if token_count(background_text(background)) <= max_token_count[args.model]:
             return background
-        background[subject] = gpt(f"Concisely summarize the facts about {subject}:\n" + background[subject])
+        background[subject] = gpt(
+            f"Concisely summarize the facts about {subject}:\n" + background[subject])
 
     return background
 
 @memory.cache
-def ddg_search(topic):
-    """Search for the given topic using DuckDuckGo and return the first result."""
-    print("Searching for:", topic)
+def ddg_top_hit(topic):
+    if args.verbose:
+        print("Search DDG for:", topic)
     results = ddg(topic)
-    try:
-        first_result = results[0]
-        return first_result
-    except IndexError:
-        return None
+    for result in results:
+        if args.verbose:
+            print("  Fetching", result['href'])
+        content = fetch_url_and_extract_text(result['href'])
+        if content:
+            return content
 
 import requests
 from bs4 import BeautifulSoup
@@ -93,7 +99,7 @@ def fetch_url_and_extract_text(url):
 
             return text
         else:
-            print(f"Error fetching URL: {response.status_code}")
+            print(f"Error fetching {url}: {response.status_code}")
             return None
     except Exception as e:
         print(f"Error fetching URL: {e}")
@@ -117,26 +123,29 @@ def main():
     else:
         args.model = "gpt-3.5-turbo"
 
-    search_prompt = (f"I want to know: {args.question}\n\n"
+    today_prompt = f"Today is {datetime.date.today().strftime('%A, %B %d, %Y')}."
+    search_prompt = (f"{today_prompt}\n\n"
+                     f"I want to know: {args.question}\n\n"
                      "What 3 search topics would help you answer this "
                      "question? Answer in a JSON list only.")
     search_text = gpt(search_prompt)
     searches = json.loads(search_text)
+    background = {}
+    for search in searches:
+        background[search] = ddg_top_hit(search)
+
     if args.verbose:
-        print("Search DuckDuckGo for:", searches)
-    background = {
-        search: fetch_url_and_extract_text(ddg_search(search)['href']) for search in searches
-    }
-    if args.verbose:
-        for search, content in background.items():
-            print(f"{search}:\n{content and content[:100]}...]")
+        pprint(("fetched:", {search : len(content) for search, content in background.items()}))
     background = shorten(background)
+    if args.verbose:
+        pprint(("shortened:", {search : len(content) for search, content in background.items()}))
     background = summarize(background)
     if args.verbose:
-        pprint(background)
+        pprint(("summarized:", {search : len(content) for search, content in background.items()}))
     print(
-        gpt(f"{background_text(background)}\n\n{args.question}")
+        gpt(f"{background_text(background)}\n\n{today_prompt}\n\n{args.question}")
     )
+    print(f"({args.model}, {gpt_query_count} queries)")
 
 if __name__ == "__main__":
     sys.exit(main())
