@@ -2,28 +2,24 @@
 
 from bs4 import BeautifulSoup
 from duckduckgo_search import ddg
-from joblib import Memory
 from pprint import pprint
 import argparse
 import datetime
 import json
-import os
 import requests
 import sys
 import textwrap
 from langchain.chat_models import ChatOpenAI
 from langchain.schema import HumanMessage
 from markdownify import MarkdownConverter
-
-cachedir = os.path.join(os.path.dirname(__file__), ".cache")
-memory = Memory(cachedir, verbose=3)
+from diskcache import Cache
+import re
 
 max_token_count = {
     "gpt-4": 8192,
     "gpt-3.5-turbo": 4097
 }
 
-@memory.cache
 def fetch_url_and_extract_info(url):
     try:
         # Fetch the URL
@@ -41,6 +37,7 @@ def fetch_url_and_extract_info(url):
             # Turn HTML into markdown, which is concise but will attempt to
             # preserve at least some formatting
             text = MarkdownConverter().convert_soup(soup)
+            text = re.sub(r"\n(\s*\n)+", "\n\n", text)
             title = soup.title.string
 
             return (title, text)
@@ -58,16 +55,23 @@ class GptSearch(object):
 
         self.query_count = 0
 
-        self.ask = memory.cache(self.ask)
-        self.ddg_top_hit = memory.cache(self.ddg_top_hit)
+        self.cache = Cache(".cache")
 
     def ask(self, prompt):
+        key = ("ask", self.model, prompt)
+        if key in self.cache:
+            print("Cache hit for", key)
+            return self.cache[key]
+
         if self.verbose:
             print("\n".join(textwrap.wrap(f"Prompt: {prompt}", subsequent_indent="    ", replace_whitespace=False)))
         self.query_count += 1
         result = self.chat([HumanMessage(content=prompt)]).content
         if self.verbose:
             print("\n".join(textwrap.wrap(f"Response: {result}", subsequent_indent="    ", replace_whitespace=False)))
+
+        self.cache[key] = result
+
         return result
 
     @staticmethod
@@ -99,16 +103,29 @@ class GptSearch(object):
 
         return background
 
-    def ddg_top_hit(self, topic):
+    def ddg_search(self, topic):
+        key = ("ddg_search", topic)
+        if key in self.cache:
+            print("Cache hit for", key)
+            return self.cache[key]
+        
         if self.verbose:
             print("Search DDG for:", topic)
-        results = ddg(topic)
+        result = ddg(topic)
+
+        self.cache[key] = result
+
+        return result
+
+    def ddg_top_hit(self, topic):
+        results = self.ddg_search(topic)
         for result in results:
             if self.verbose:
                 print("  Fetching", result['href'])
             (title, content) = fetch_url_and_extract_info(result['href'])
             if content:
-                return (result['href'], title, content)
+                return_value = (result['href'], str(title), content)
+                return return_value
 
     def main(self):
         parser = argparse.ArgumentParser(
