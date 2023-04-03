@@ -10,13 +10,13 @@ import json
 import os
 import requests
 import sys
-import tiktoken
 import textwrap
 from langchain.chat_models import ChatOpenAI
-from langchain.schema import AIMessage, HumanMessage, SystemMessage
+from langchain.schema import HumanMessage
+from markdownify import MarkdownConverter
 
 cachedir = os.path.join(os.path.dirname(__file__), ".cache")
-memory = Memory(cachedir, verbose=0)
+memory = Memory(cachedir, verbose=3)
 
 max_token_count = {
     "gpt-4": 8192,
@@ -34,8 +34,13 @@ def fetch_url_and_extract_info(url):
             # Parse the HTML content using BeautifulSoup
             soup = BeautifulSoup(response.content, 'html.parser')
 
-            # Extract the text from the HTML
-            text = ' '.join(soup.stripped_strings)
+            # Remove unwanted tags
+            for tag in soup.find_all(["script", "style"]):
+                tag.decompose()
+
+            # Turn HTML into markdown, which is concise but will attempt to
+            # preserve at least some formatting
+            text = MarkdownConverter().convert_soup(soup)
             title = soup.title.string
 
             return (title, text)
@@ -72,10 +77,7 @@ class GptSearch(object):
         )
 
     def token_count(self, text):
-        # TODO: Use langchain
-        encoding = tiktoken.encoding_for_model(self.model)
-        # tiktoken seems to be undercounting tokens compared to the API
-        return len(encoding.encode(text)) * 2
+        return self.chat.get_num_tokens(text)
 
     def shorten(self, background):
         for subject in background:
