@@ -20,6 +20,26 @@ max_token_count = {
     "gpt-3.5-turbo": 4097
 }
 
+def simplify_html(html):
+    soup = BeautifulSoup(html, 'html.parser')
+
+    # Remove unwanted tags
+    for tag in soup.find_all(["script", "style"]):
+        tag.decompose()
+
+    # Remove links. They're not helpful.
+    for tag in soup.find_all("a"):
+        del tag["href"]
+    for tag in soup.find_all("img"):
+        del tag["src"]
+    soup.smooth()
+
+    # Turn HTML into markdown, which is concise but will attempt to
+    # preserve at least some formatting
+    text = MarkdownConverter().convert_soup(soup)
+    text = re.sub(r"\n(\s*\n)+", "\n\n", text)
+    return text
+
 class GptSearch(object):
     def __init__(self):
         self.model = "gpt-3.5-turbo"
@@ -53,26 +73,6 @@ class GptSearch(object):
     def extract_title(self, html):
         soup = BeautifulSoup(html, 'html.parser')
         return soup.title.string
-
-    def simplify_html(self, html):
-        soup = BeautifulSoup(html, 'html.parser')
-
-        # Remove unwanted tags
-        for tag in soup.find_all(["script", "style"]):
-            tag.decompose()
-
-        # Remove links. They're not helpful.
-        for tag in soup.find_all("a"):
-            del tag["href"]
-        for tag in soup.find_all("img"):
-            del tag["src"]
-        soup.smooth()
-
-        # Turn HTML into markdown, which is concise but will attempt to
-        # preserve at least some formatting
-        text = MarkdownConverter().convert_soup(soup)
-        text = re.sub(r"\n(\s*\n)+", "\n\n", text)
-        return text
 
     def ask(self, prompt):
         key = ("ask", self.model, prompt)
@@ -113,7 +113,8 @@ class GptSearch(object):
         for subject in background:
             if not background[subject]:
                 continue
-            if self.token_count(self.background_text(background)) <= max_token_count[self.model]:
+            # Leave 500 tokens for the prompt
+            if self.token_count(self.background_text(background)) <= max_token_count[self.model] - 500:
                 return background
             background[subject] = self.ask(
                 f"Concisely summarize the facts about {subject}:\n" + background[subject])
@@ -134,17 +135,20 @@ class GptSearch(object):
 
         return result
 
-    def ddg_top_hit(self, topic):
+    def ddg_top_hit(self, topic, skip=[]):
         results = self.ddg_search(topic)
         for result in results:
+            if result['href'] in skip:
+                continue
             if self.verbose:
                 print("  Fetching", result['href'])
             html = self.fetch(result['href'])
-            title = self.extract_title(html)
-            content = self.simplify_html(html)
-            if content:
-                return_value = (result['href'], str(title), content)
-                return return_value
+            if html:
+                title = self.extract_title(html)
+                content = simplify_html(html)
+                if content:
+                    return_value = (result['href'], str(title), content)
+                    return return_value
 
     def main(self):
         parser = argparse.ArgumentParser(
@@ -175,15 +179,13 @@ class GptSearch(object):
         background = {}
         sources = []
         for search in searches:
-            source, title, content = self.ddg_top_hit(search)
+            source, title, content = self.ddg_top_hit(search,
+                                                      skip=[source for source, _ in sources])
             background[search] = content
             sources.append((source, title))
 
         if args.verbose:
             pprint(("fetched:", {search : len(content) for search, content in background.items()}))
-        background = self.shorten(background)
-        if args.verbose:
-            pprint(("shortened:", {search : len(content) for search, content in background.items()}))
         background = self.summarize(background)
         if args.verbose:
             pprint(("summarized:", {search : len(content) for search, content in background.items()}))
