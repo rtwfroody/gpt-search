@@ -20,34 +20,6 @@ max_token_count = {
     "gpt-3.5-turbo": 4097
 }
 
-def fetch_url_and_extract_info(url):
-    try:
-        # Fetch the URL
-        response = requests.get(url, timeout=10)
-
-        # Check if the request was successful
-        if response.status_code == 200:
-            # Parse the HTML content using BeautifulSoup
-            soup = BeautifulSoup(response.content, 'html.parser')
-
-            # Remove unwanted tags
-            for tag in soup.find_all(["script", "style"]):
-                tag.decompose()
-
-            # Turn HTML into markdown, which is concise but will attempt to
-            # preserve at least some formatting
-            text = MarkdownConverter().convert_soup(soup)
-            text = re.sub(r"\n(\s*\n)+", "\n\n", text)
-            title = soup.title.string
-
-            return (title, text)
-        else:
-            print(f"Error fetching {url}: {response.status_code}")
-            return (None, None)
-    except Exception as e:
-        print(f"Error fetching {url}: {e}")
-        return (None, None)
-
 class GptSearch(object):
     def __init__(self):
         self.model = "gpt-3.5-turbo"
@@ -56,6 +28,51 @@ class GptSearch(object):
         self.query_count = 0
 
         self.cache = Cache(".cache")
+
+    def fetch(self, url):
+        key = ("fetch", url)
+        if key in self.cache:
+            print("Cache hit for", key)
+            return self.cache[key]
+
+        try:
+            # Fetch the URL
+            response = requests.get(url, timeout=10)
+
+            # Check if the request was successful
+            if response.status_code == 200:
+                self.cache[key] = response.content
+                return response.content
+            else:
+                print(f"Error fetching {url}: {response.status_code}")
+                return None
+        except Exception as e:
+            print(f"Error fetching {url}: {e}")
+            return None
+
+    def extract_title(self, html):
+        soup = BeautifulSoup(html, 'html.parser')
+        return soup.title.string
+
+    def simplify_html(self, html):
+        soup = BeautifulSoup(html, 'html.parser')
+
+        # Remove unwanted tags
+        for tag in soup.find_all(["script", "style"]):
+            tag.decompose()
+
+        # Remove links. They're not helpful.
+        for tag in soup.find_all("a"):
+            del tag["href"]
+        for tag in soup.find_all("img"):
+            del tag["src"]
+        soup.smooth()
+
+        # Turn HTML into markdown, which is concise but will attempt to
+        # preserve at least some formatting
+        text = MarkdownConverter().convert_soup(soup)
+        text = re.sub(r"\n(\s*\n)+", "\n\n", text)
+        return text
 
     def ask(self, prompt):
         key = ("ask", self.model, prompt)
@@ -122,7 +139,9 @@ class GptSearch(object):
         for result in results:
             if self.verbose:
                 print("  Fetching", result['href'])
-            (title, content) = fetch_url_and_extract_info(result['href'])
+            html = self.fetch(result['href'])
+            title = self.extract_title(html)
+            content = self.simplify_html(html)
             if content:
                 return_value = (result['href'], str(title), content)
                 return return_value
