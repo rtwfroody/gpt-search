@@ -1,19 +1,22 @@
 #!/bin/env python3
 
-from bs4 import BeautifulSoup
-from duckduckgo_search import ddg
 from pprint import pprint
 import argparse
 import datetime
 import json
+import textwrap
 import requests
 import sys
-import textwrap
 from langchain.chat_models import ChatOpenAI
 from langchain.schema import HumanMessage
 from markdownify import MarkdownConverter
 from diskcache import Cache
 import re
+import appdirs
+import llmlib
+
+from duckduckgo_search import ddg
+from bs4 import BeautifulSoup
 
 max_token_count = {
     "gpt-4": 8192,
@@ -47,7 +50,7 @@ class GptSearch(object):
 
         self.query_count = 0
 
-        self.cache = Cache(".cache")
+        self.cache = Cache(appdirs.user_cache_dir("gpt_search"))
 
     def fetch(self, url):
         key = ("fetch", url)
@@ -81,11 +84,14 @@ class GptSearch(object):
             return self.cache[key]
 
         if self.verbose:
-            print("\n".join(textwrap.wrap(f"Prompt: {prompt}", subsequent_indent="    ", replace_whitespace=False)))
+            print("\n".join(textwrap.wrap(
+                f"Prompt: {prompt}", subsequent_indent="    ", replace_whitespace=False)))
         self.query_count += 1
         result = self.chat([HumanMessage(content=prompt)]).content
         if self.verbose:
-            print("\n".join(textwrap.wrap(f"Response: {result}", subsequent_indent="    ", replace_whitespace=False)))
+            print("\n".join(
+                textwrap.wrap(f"Response: {result}",
+                              subsequent_indent="    ", replace_whitespace=False)))
 
         self.cache[key] = result
 
@@ -114,9 +120,10 @@ class GptSearch(object):
             if not background[subject]:
                 continue
             # Leave 500 tokens for the prompt
-            if self.token_count(self.background_text(background)) <= max_token_count[self.model] - 500:
+            if (self.token_count(self.background_text(background)) <=
+                    max_token_count[self.model] - 500):
                 return background
-            background[subject] = self.ask(
+            background[subject] = self.llm.ask(
                 f"Concisely summarize the facts about {subject}:\n" + background[subject])
 
         return background
@@ -126,7 +133,7 @@ class GptSearch(object):
         if key in self.cache:
             print("Cache hit for", key)
             return self.cache[key]
-        
+
         if self.verbose:
             print("Search DDG for:", topic)
         result = ddg(topic)
@@ -166,15 +173,16 @@ class GptSearch(object):
         else:
             self.model = "gpt-3.5-turbo"
         self.verbose = args.verbose
-        
+
         self.chat = ChatOpenAI(model_name=self.model)
+        self.llm = llmlib.Llm(llmlib.Openai(self.model), verbose=self.verbose)
 
         today_prompt = f"Today is {datetime.date.today().strftime('%A, %B %d, %Y')}."
         search_prompt = (f"{today_prompt}\n\n"
                         f"I want to know: {args.question}\n\n"
                         "What 3 search topics would help you answer this "
                         "question? Answer in a JSON list only.")
-        search_text = self.ask(search_prompt)
+        search_text = self.llm.ask(search_prompt)
         searches = json.loads(search_text)
         background = {}
         sources = []
@@ -188,9 +196,10 @@ class GptSearch(object):
             pprint(("fetched:", {search : len(content) for search, content in background.items()}))
         background = self.summarize(background)
         if args.verbose:
-            pprint(("summarized:", {search : len(content) for search, content in background.items()}))
+            pprint(("summarized:",
+                    {search : len(content) for search, content in background.items()}))
         print(
-            self.ask(f"{self.background_text(background)}\n\n{today_prompt}\n\n{args.question}")
+            self.llm.ask(f"{self.background_text(background)}\n\n{today_prompt}\n\n{args.question}")
         )
         print(f"({self.model}, {self.query_count} queries)")
         print()
