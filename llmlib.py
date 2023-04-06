@@ -167,3 +167,6 @@ class Llm:
                 self.ask(f"{prompt} {part}")
                 for part in self.split_text(text, token_limit=token_limit))
         return text
+
+    def get_counters(self):
+        return self.counters

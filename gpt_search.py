@@ -46,8 +46,6 @@ class GptSearch(object):
         self.model = "gpt-3.5-turbo"
         self.verbose = False
 
-        self.query_count = 0
-
         self.cache = Cache(appdirs.user_cache_dir("gpt_search"))
 
     def fetch(self, url):
@@ -161,11 +159,14 @@ class GptSearch(object):
                 f"Write a short article that discusses: {args.question}"
             ]))
         )
-        print(f"({self.model}, {self.query_count} queries)")
+        print(f"({self.model})")
         print()
         print("Sources:")
         for source, title in sources:
             print(f"* [{title}]({source})")
+
+        if args.verbose:
+            pprint(self.llm.get_counters())
 
 if __name__ == "__main__":
     gptSearch = GptSearch()
