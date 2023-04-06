@@ -78,6 +78,8 @@ class Llm:
         self.counters = {}
         log_dir = appdirs.user_log_dir("llmlib")
         log_path = os.path.join(log_dir, "log.txt")
+        if self.verbose:
+            print(f"Logging to {log_path}")
         os.makedirs(log_dir, exist_ok=True)
         self.log_fd = open(log_path, "a")
 
@@ -86,8 +88,10 @@ class Llm:
         if not text.endswith("\n"):
             self.log_fd.write("\n")
 
-    def ask(self, prompt):
-        self.log("\n".join(textwrap.wrap(f"Prompt: {prompt}", subsequent_indent="    ")))
+    def ask(self, prompt : str):
+        self.log("\n".join(textwrap.wrap(f"Ask {self.api!r}: {prompt}", subsequent_indent="    ")))
+        if self.verbose:
+            print(f"Ask {self.api!r}: {prompt[:60]!r}")
 
         assert len(prompt) > 25
 
@@ -97,13 +101,15 @@ class Llm:
 
         if result:
             self.increment_counter(f"ask-{self.api!r}-hit")
-            self.log_fd.write("    (cached)\n")
+            cached = " (cached)"
         else:
             self.increment_counter(f"ask-{self.api!r}-miss")
-
             result = self.api.ask(prompt)
+            cached = ""
 
-        self.log("\n".join(textwrap.wrap(f"Response: {result}", subsequent_indent="    ")))
+        self.log("\n".join(textwrap.wrap(f"Response{cached}: {result}", subsequent_indent="    ")))
+        if self.verbose:
+            print(f"Response{cached}: {result[:60]!r}")
 
         self.cache[cache_key] = result
 

@@ -152,13 +152,13 @@ class GptSearch(object):
             sources.append((source, title))
 
         background_text = self.llm.summarize(background_text,
-                prompt=f"{today_prompt}\n\nConcisely summarize facts about {args.question}:")
+                prompt=f"{today_prompt}\n\nMake a list of facts about {args.question}:")
 
         print(
             self.llm.ask("\n\n".join([
                 background_text,
                 today_prompt,
-                f"Answer this question: {args.question}"
+                f"Write a short article that discusses: {args.question}"
             ]))
         )
         print(f"({self.model}, {self.query_count} queries)")
