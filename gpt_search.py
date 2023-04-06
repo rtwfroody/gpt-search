@@ -4,11 +4,9 @@ from pprint import pprint
 import argparse
 import datetime
 import json
-import textwrap
 import requests
 import sys
 from langchain.chat_models import ChatOpenAI
-from langchain.schema import HumanMessage
 from markdownify import MarkdownConverter
 from diskcache import Cache
 import re
@@ -63,12 +61,13 @@ class GptSearch(object):
             response = requests.get(url, timeout=10)
 
             # Check if the request was successful
-            if response.status_code == 200:
-                self.cache[key] = response.content
-                return response.content
-            else:
+            if response.status_code != 200:
                 print(f"Error fetching {url}: {response.status_code}")
                 return None
+
+            self.cache[key] = response.content
+            return response.content
+
         except Exception as e:
             print(f"Error fetching {url}: {e}")
             return None
@@ -76,32 +75,6 @@ class GptSearch(object):
     def extract_title(self, html):
         soup = BeautifulSoup(html, 'html.parser')
         return soup.title.string
-
-    def ask(self, prompt):
-        key = ("ask", self.model, prompt)
-        if key in self.cache:
-            print("Cache hit for", key)
-            return self.cache[key]
-
-        if self.verbose:
-            print("\n".join(textwrap.wrap(
-                f"Prompt: {prompt}", subsequent_indent="    ", replace_whitespace=False)))
-        self.query_count += 1
-        result = self.chat([HumanMessage(content=prompt)]).content
-        if self.verbose:
-            print("\n".join(
-                textwrap.wrap(f"Response: {result}",
-                              subsequent_indent="    ", replace_whitespace=False)))
-
-        self.cache[key] = result
-
-        return result
-
-    @staticmethod
-    def background_text(background):
-        return "\n\n".join(
-            f"{subject}:\n{contents}" for subject, contents in background.items()
-        )
 
     def token_count(self, text):
         return self.chat.get_num_tokens(text)
@@ -112,20 +85,6 @@ class GptSearch(object):
                 continue
             while self.token_count(background[subject]) > max_token_count[self.model]:
                 background[subject] = background[subject][:int(len(background[subject]) * .9)]
-        return background
-
-    def summarize(self, background):
-        # TODO: Use langchain
-        for subject in background:
-            if not background[subject]:
-                continue
-            # Leave 500 tokens for the prompt
-            if (self.token_count(self.background_text(background)) <=
-                    max_token_count[self.model] - 500):
-                return background
-            background[subject] = self.llm.ask(
-                f"Concisely summarize the facts about {subject}:\n" + background[subject])
-
         return background
 
     def ddg_search(self, topic):
@@ -184,22 +143,23 @@ class GptSearch(object):
                         "question? Answer in a JSON list only.")
         search_text = self.llm.ask(search_prompt)
         searches = json.loads(search_text)
-        background = {}
+        background_text = ""
         sources = []
         for search in searches:
             source, title, content = self.ddg_top_hit(search,
                                                       skip=[source for source, _ in sources])
-            background[search] = content
+            background_text += f"# {search}\n\n{content}\n\n"
             sources.append((source, title))
 
-        if args.verbose:
-            pprint(("fetched:", {search : len(content) for search, content in background.items()}))
-        background = self.summarize(background)
-        if args.verbose:
-            pprint(("summarized:",
-                    {search : len(content) for search, content in background.items()}))
+        background_text = self.llm.summarize(background_text,
+                prompt=f"{today_prompt}\n\nConcisely summarize facts about {args.question}:")
+
         print(
-            self.llm.ask(f"{self.background_text(background)}\n\n{today_prompt}\n\n{args.question}")
+            self.llm.ask("\n\n".join([
+                background_text,
+                today_prompt,
+                f"Answer this question: {args.question}"
+            ]))
         )
         print(f"({self.model}, {self.query_count} queries)")
         print()
