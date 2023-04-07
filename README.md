@@ -53,8 +53,7 @@ Please be aware that this program can perform up to 5 GPT queries, which may hav
 
 ### gpt-3.5-turbo
 
-```
-$ ./gpt_search.py "News about ChatGPT."
+`$ ./gpt_search.py "News about ChatGPT."`
 ChatGPT, the AI language model developed by OpenAI, has been making waves in the tech world with its advanced capabilities. As previously reported, ChatGPT released experimental AI plugins on March 23, 2023, which allowed the AI to access portions of the internet and provided added functionality for its users.
 
 Recently, OpenAI announced its most advanced language model yet, GPT-4, which is currently only available in the ChatGPT Plus paid subscription and as an API for developers. Companies such as Duolingo, Be My Eyes, Stripe, and Khan Academy have already integrated GPT-4 into their applications and services.
@@ -70,12 +69,10 @@ Sources:
 * [ChatGPT — Release Notes | OpenAI Help Center](https://help.openai.com/en/articles/6825453-chatgpt-release-notes)
 * [What happens when ChatGPT lies about real people? - The Washington Post](https://www.washingtonpost.com/technology/2023/04/05/chatgpt-lies/)
 * [GPT-4: how to use, new features, availability, and more | Digital Trends](https://www.digitaltrends.com/computing/chatgpt-4-everything-we-know-so-far/)
-```
 
 ### gpt-4
 
-```
-tnewsome@compy-linux:~/projects/gpt-search$ ./gpt_search.py -4 "News about ChatGPT."
+`$ ./gpt_search.py -4 "News about ChatGPT."`
 Title: The Latest Developments and Applications in the ChatGPT Space
 
 Recent news surrounding ChatGPT, OpenAI's Al-powered chatbot, reveals its growing presence and applications across various industries. With a rapidly expanding user base, numerous startups backed by Y Combinator and other investors are building on ChatGPT's capabilities, exploring multiple use cases and introducing innovative ideas, including:
@@ -97,4 +94,3 @@ Sources:
 * [ChatGPT — Release Notes | OpenAI Help Center](https://help.openai.com/en/articles/6825453-chatgpt-release-notes)
 * [GPT-4: how to use, new features, availability, and more | Digital Trends](https://www.digitaltrends.com/computing/chatgpt-4-everything-we-know-so-far/)
 * [These Y Combinator-backed startups are trying to build 'ChatGPT for X' | TechCrunch](https://techcrunch.com/2023/04/04/these-y-combinator-startups-are-trying-to-build-chatgpt-for-x/)
-```
