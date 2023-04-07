@@ -12,6 +12,8 @@ from diskcache import Cache
 import re
 import appdirs
 import llmlib
+import textwrap
+import itertools
 
 from duckduckgo_search import ddg
 from bs4 import BeautifulSoup
@@ -51,7 +53,8 @@ class GptSearch(object):
     def fetch(self, url):
         key = ("fetch", url)
         if key in self.cache:
-            print("Cache hit for", key)
+            if self.verbose:
+                print("Cache hit for", key)
             return self.cache[key]
 
         try:
@@ -88,7 +91,8 @@ class GptSearch(object):
     def ddg_search(self, topic):
         key = ("ddg_search", topic)
         if key in self.cache:
-            print("Cache hit for", key)
+            if self.verbose:
+                print("Cache hit for", key)
             return self.cache[key]
 
         if self.verbose:
@@ -134,10 +138,12 @@ class GptSearch(object):
         self.chat = ChatOpenAI(model_name=self.model)
         self.llm = llmlib.Llm(llmlib.Openai(self.model), verbose=self.verbose)
 
-        today_prompt = f"Today is {datetime.date.today().strftime('%A, %B %d, %Y')}."
-        search_prompt = (f"{today_prompt}\n\n"
-                        f"I want to know: {args.question}\n\n"
-                        "What 3 search topics would help you answer this "
+        today_prompt = f"Today is {datetime.date.today().strftime('%a, %b %e, %Y')}."
+        search_prompt = ("# Background\n\n"
+                        f"{today_prompt}\n\n"
+                        f"Prepare for this prompt: {args.question}\n\n"
+                        "# Prompt\n\n"
+                        "What 3 Internet search topics would help you answer this "
                         "question? Answer in a JSON list only.")
         search_text = self.llm.ask(search_prompt)
         searches = json.loads(search_text)
@@ -150,23 +156,28 @@ class GptSearch(object):
             sources.append((source, title))
 
         background_text = self.llm.summarize(background_text,
-                prompt=f"{today_prompt}\n\nMake a list of facts about {args.question}:")
+                prompt=f"{today_prompt}\n\n"
+                "You provide helpful and complete answers.\n\n"
+                f"Make a list of facts that would help with: {args.question}\n\n")
 
-        print(
-            self.llm.ask("\n\n".join([
-                background_text,
-                today_prompt,
-                f"Write a short article that discusses: {args.question}"
-            ]))
-        )
+        answer = self.llm.ask("\n\n".join([
+            "# Background",
+            background_text,
+            today_prompt,
+            "You provide helpful and complete answers.",
+            "# Prompt",
+            f"{args.question}"]))
+        paragraphs = answer.splitlines()
+        wrapped_paragraphs = [textwrap.wrap(p) for p in paragraphs]
+        print("\n".join("\n".join(p) for p in wrapped_paragraphs))
         print(f"({self.model})")
         print()
         print("Sources:")
         for source, title in sources:
             print(f"* [{title}]({source})")
 
-        if args.verbose:
-            pprint(self.llm.get_counters())
+        #if args.verbose:
+        pprint(self.llm.get_counters())
 
 if __name__ == "__main__":
     gptSearch = GptSearch()

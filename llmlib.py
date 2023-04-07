@@ -6,6 +6,7 @@ import tiktoken
 from diskcache import Cache
 import appdirs
 import re
+import itertools
 
 def split_separator(text, separator):
     """Split a text using a separator, but keep the separator in the result.
@@ -26,6 +27,13 @@ def split_separator(text, separator):
         remainder = next_remainder
         before_remainder = next_before_remainder
     return parts
+
+def quote(text, prefix='> '):
+    paragraphs = text.splitlines()
+    wrapped_paragraphs = [textwrap.wrap(p) for p in paragraphs]
+    lines = "\n".join("\n".join(p) for p in wrapped_paragraphs)
+    quoted_lines = re.sub(r"^", prefix, lines, flags=re.MULTILINE)
+    return quoted_lines
 
 class Api:
     def ask(self, prompt):
@@ -62,10 +70,12 @@ class Openai(Api):
         return len(enc.encode(prompt))
 
     def max_token_count(self):
+        # I think this compensates for the overhead in the messages dict.
+        overhead_tokens = 8
         return {
                 "gpt-4": 8192,
                 "gpt-3.5-turbo": 4097
-            }.get(self.model, 4096)
+            }.get(self.model, 4096) - overhead_tokens
 
     def __repr__(self) -> str:
         return f"Openai(model={self.model})"
@@ -89,7 +99,7 @@ class Llm:
             self.log_fd.write("\n")
 
     def ask(self, prompt : str):
-        self.log("\n".join(textwrap.wrap(f"Ask {self.api!r}: {prompt}", subsequent_indent="    ")))
+        self.log(f"\nAsk {self.api!r}:\n{quote(prompt)}")
         if self.verbose:
             print(f"Ask {self.api!r}: {prompt[:60]!r}")
 
@@ -107,7 +117,7 @@ class Llm:
             result = self.api.ask(prompt)
             cached = ""
 
-        self.log("\n".join(textwrap.wrap(f"Response{cached}: {result}", subsequent_indent="    ")))
+        self.log(f"\nResponse{cached}:\n{quote(result)}")
         if self.verbose:
             print(f"Response{cached}: {result[:60]!r}")
 
