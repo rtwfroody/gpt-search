@@ -1,22 +1,22 @@
 #!/bin/env python3
 
-from pprint import pprint
+"""Combine GPT with DuckDuckGo to answer questions."""
+
 import argparse
 import datetime
 import json
-import requests
-import sys
-from langchain.chat_models import ChatOpenAI
-from markdownify import MarkdownConverter
-from diskcache import Cache
 import re
-import appdirs
-import llmlib
+import sys
 import textwrap
-import itertools
 
-from duckduckgo_search import ddg
 from bs4 import BeautifulSoup
+from diskcache import Cache
+from duckduckgo_search import ddg
+from markdownify import MarkdownConverter
+import appdirs
+import requests
+
+import llmlib
 
 max_token_count = {
     "gpt-4": 8192,
@@ -24,6 +24,7 @@ max_token_count = {
 }
 
 def simplify_html(html):
+    """Convert HTML to markdown, removing some tags and links."""
     soup = BeautifulSoup(html, 'html.parser')
 
     # Remove unwanted tags
@@ -43,14 +44,23 @@ def simplify_html(html):
     text = re.sub(r"\n(\s*\n)+", "\n\n", text)
     return text
 
-class GptSearch(object):
+def extract_title(html):
+    """Extract the title from an HTML document."""
+    soup = BeautifulSoup(html, 'html.parser')
+    return soup.title.string
+
+class GptSearch:
+    """Combine GPT with DuckDuckGo to answer questions."""
     def __init__(self):
         self.model = "gpt-3.5-turbo"
         self.verbose = False
 
         self.cache = Cache(appdirs.user_cache_dir("gpt_search"))
 
+        self.llm = None
+
     def fetch(self, url):
+        """Fetch a URL, caching the result."""
         key = ("fetch", url)
         if key in self.cache:
             if self.verbose:
@@ -69,26 +79,12 @@ class GptSearch(object):
             self.cache[key] = response.content
             return response.content
 
-        except Exception as e:
-            print(f"Error fetching {url}: {e}")
+        except requests.RequestException as exception:
+            print(f"Error fetching {url}: {exception}")
             return None
 
-    def extract_title(self, html):
-        soup = BeautifulSoup(html, 'html.parser')
-        return soup.title.string
-
-    def token_count(self, text):
-        return self.chat.get_num_tokens(text)
-
-    def shorten(self, background):
-        for subject in background:
-            if not background[subject]:
-                continue
-            while self.token_count(background[subject]) > max_token_count[self.model]:
-                background[subject] = background[subject][:int(len(background[subject]) * .9)]
-        return background
-
     def ddg_search(self, topic):
+        """Search DuckDuckGo for a topic, caching the result."""
         key = ("ddg_search", topic)
         if key in self.cache:
             if self.verbose:
@@ -103,7 +99,8 @@ class GptSearch(object):
 
         return result
 
-    def ddg_top_hit(self, topic, skip=[]):
+    def ddg_top_hit(self, topic, skip=()):
+        """Search DuckDuckGo for a topic, and return the top hit."""
         results = self.ddg_search(topic)
         for result in results:
             if result['href'] in skip:
@@ -112,13 +109,30 @@ class GptSearch(object):
                 print("  Fetching", result['href'])
             html = self.fetch(result['href'])
             if html:
-                title = self.extract_title(html)
+                title = extract_title(html)
                 content = simplify_html(html)
                 if content:
                     return_value = (result['href'], str(title), content)
                     return return_value
+        return (None, None, None)
+
+    def fetch_sources(self, search_prompt):
+        """Fetch sources for a question."""
+        search_text = self.llm.ask(search_prompt)
+        searches = json.loads(search_text)
+        background_text = ""
+        sources = []
+        for search in searches:
+            source, title, content = self.ddg_top_hit(search,
+                                                      skip=[source for source, _ in sources])
+            if not source:
+                continue
+            background_text += f"# {search}\n\n{content}\n\n"
+            sources.append((source, title))
+        return background_text, sources
 
     def main(self):
+        """Main function that parses arguments etc."""
         parser = argparse.ArgumentParser(
             description="""Combine GPT with DuckDuckGo to answer questions.
             
@@ -135,7 +149,6 @@ class GptSearch(object):
             self.model = "gpt-3.5-turbo"
         self.verbose = args.verbose
 
-        self.chat = ChatOpenAI(model_name=self.model)
         self.llm = llmlib.Llm(llmlib.Openai(self.model), verbose=self.verbose)
 
         today_prompt = f"Today is {datetime.date.today().strftime('%a, %b %e, %Y')}."
@@ -145,15 +158,7 @@ class GptSearch(object):
                         "# Prompt\n\n"
                         "What 3 Internet search topics would help you answer this "
                         "question? Answer in a JSON list only.")
-        search_text = self.llm.ask(search_prompt)
-        searches = json.loads(search_text)
-        background_text = ""
-        sources = []
-        for search in searches:
-            source, title, content = self.ddg_top_hit(search,
-                                                      skip=[source for source, _ in sources])
-            background_text += f"# {search}\n\n{content}\n\n"
-            sources.append((source, title))
+        background_text, sources = self.fetch_sources(search_prompt)
 
         background_text = self.llm.summarize(background_text,
                 prompt=f"{today_prompt}\n\n"

@@ -1,16 +1,21 @@
+"""
+Library that provides basic function for using large language models (LLMs).
+
+Currently only supports OpenAI.
+"""
+
 import os
+import re
 import textwrap
 
-import openai
-import tiktoken
 from diskcache import Cache
 import appdirs
-import re
-import itertools
+import openai
+import tiktoken
 
 def split_separator(text, separator):
     """Split a text using a separator, but keep the separator in the result.
-    
+
     Separator must be a regex with two capture groups. The first one is kept
     with the text before the split, the second one is kept with the text after
     the split."""
@@ -29,6 +34,7 @@ def split_separator(text, separator):
     return parts
 
 def quote(text, prefix='> '):
+    """Quote a text, preserving paragraphs and line breaks."""
     paragraphs = text.splitlines()
     wrapped_paragraphs = [textwrap.wrap(p) for p in paragraphs]
     lines = "\n".join("\n".join(p) for p in wrapped_paragraphs)
@@ -36,22 +42,28 @@ def quote(text, prefix='> '):
     return quoted_lines
 
 class Api:
+    """Abstract base class for APIs to LLMs."""
     def ask(self, prompt):
+        """Ask the model a question."""
         raise NotImplementedError
 
     def token_count(self, prompt):
+        """Return the number of tokens in the prompt."""
         raise NotImplementedError
 
     def max_token_count(self):
+        """Return the maximum number of tokens that can be sent to the model."""
         raise NotImplementedError
 
 class Openai(Api):
+    """API to OpenAI's GPT model."""
     def __init__(self, model="gpt-3.5-turbo", verbose=False, api_key=None):
         openai.api_key = api_key or os.environ.get("OPENAI_API_KEY")
         self.model = model
         self.verbose = verbose
 
     def ask(self, prompt):
+        """Ask the model a question."""
         try:
             response = openai.ChatCompletion.create(
                 model=self.model,
@@ -60,16 +72,18 @@ class Openai(Api):
                 ]
             )
             result = response.choices[0]['message']['content']
-        except openai.error.InvalidRequestError as e:
-            e._message += f"; computed token length={self.token_count(prompt)}"
+        except openai.error.InvalidRequestError as exception:
+            exception._message += f"; computed token length={self.token_count(prompt)}"
             raise
         return result
 
     def token_count(self, prompt):
+        """Return the number of tokens in the prompt."""
         enc = tiktoken.encoding_for_model(self.model)
         return len(enc.encode(prompt))
 
     def max_token_count(self):
+        """Return the maximum number of tokens that can be sent to the model."""
         # I think this compensates for the overhead in the messages dict.
         overhead_tokens = 8
         return {
@@ -81,6 +95,7 @@ class Openai(Api):
         return f"Openai({self.model})"
 
 class Llm:
+    """Interface to a large language model (LLM)."""
     def __init__(self, api : Api, verbose=False):
         self.api = api
         self.verbose = verbose
@@ -91,15 +106,18 @@ class Llm:
         if self.verbose:
             print(f"Logging to {log_path}")
         os.makedirs(log_dir, exist_ok=True)
-        self.log_fd = open(log_path, "a")
+        # pylint: disable-msg=consider-using-with
+        self.log_fd = open(log_path, "a", encoding="utf-8")
 
-    def log(self, text):
+    def _log(self, text : str):
+        """Log text to the log file."""
         self.log_fd.write(text)
         if not text.endswith("\n"):
             self.log_fd.write("\n")
 
     def ask(self, prompt : str):
-        self.log(f"\nAsk {self.api!r}:\n{quote(prompt)}")
+        """Ask the model a question."""
+        self._log(f"\nAsk {self.api!r}:\n{quote(prompt)}")
         if self.verbose:
             print(f"Ask {self.api!r}: {prompt[:60]!r}")
 
@@ -107,17 +125,17 @@ class Llm:
 
         cache_key = ("ask", repr(self.api), prompt)
         result = self.cache.get(cache_key)
-        self.increment_counter(f"ask {self.api!r}")
+        self._increment_counter(f"ask {self.api!r}")
 
         if result:
-            self.increment_counter(f"ask-hit {self.api!r}")
+            self._increment_counter(f"ask-hit {self.api!r}")
             cached = " (cached)"
         else:
-            self.increment_counter(f"ask-miss {self.api!r}")
+            self._increment_counter(f"ask-miss {self.api!r}")
             result = self.api.ask(prompt)
             cached = ""
 
-        self.log(f"\nResponse{cached}:\n{quote(result)}")
+        self._log(f"\nResponse{cached}:\n{quote(result)}")
         if self.verbose:
             print(f"Response{cached}: {result[:60]!r}")
 
@@ -125,7 +143,8 @@ class Llm:
 
         return result
 
-    def increment_counter(self, name):
+    def _increment_counter(self, name):
+        """Increment a counter."""
         self.counters.setdefault(name, 0)
         self.counters[name] += 1
 
@@ -141,8 +160,9 @@ class Llm:
                                    r"(\n+)",
                                    r"(\s+)"))
 
-    def split_text(self, text, token_limit=None, separators=(r"(\n(?:\s*\n)+)()", r"(\n+)()", r"(\s+)()")):
-        """Split a text to fit the given token limit."""
+    def split_text(self, text, token_limit=None,
+                   separators=(r"(\n(?:\s*\n)+)()", r"(\n+)()", r"(\s+)()")):
+        """Split a text into parts which each fit the given token limit."""
         if token_limit is None:
             token_limit = self.api.max_token_count()
 
@@ -179,7 +199,12 @@ class Llm:
         return text
 
     def counter_string(self, pattern="^ask "):
+        """Return a string representation of the counters."""
         return "; ".join(
             f"{name}:{count}"
             for name, count in self.counters.items()
             if re.search(pattern, name))
+
+    def get_num_tokens(self, text):
+        """Return the number of tokens in the text."""
+        return self.api.token_count(text)
