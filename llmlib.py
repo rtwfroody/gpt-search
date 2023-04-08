@@ -78,7 +78,7 @@ class Openai(Api):
             }.get(self.model, 4096) - overhead_tokens
 
     def __repr__(self) -> str:
-        return f"Openai(model={self.model})"
+        return f"Openai({self.model})"
 
 class Llm:
     def __init__(self, api : Api, verbose=False):
@@ -107,13 +107,13 @@ class Llm:
 
         cache_key = ("ask", repr(self.api), prompt)
         result = self.cache.get(cache_key)
-        self.increment_counter(f"ask-{self.api!r}")
+        self.increment_counter(f"ask {self.api!r}")
 
         if result:
-            self.increment_counter(f"ask-{self.api!r}-hit")
+            self.increment_counter(f"ask-hit {self.api!r}")
             cached = " (cached)"
         else:
-            self.increment_counter(f"ask-{self.api!r}-miss")
+            self.increment_counter(f"ask-miss {self.api!r}")
             result = self.api.ask(prompt)
             cached = ""
 
@@ -178,5 +178,8 @@ class Llm:
                 for part in self.split_text(text, token_limit=token_limit))
         return text
 
-    def get_counters(self):
-        return self.counters
+    def counter_string(self, pattern="^ask "):
+        return "; ".join(
+            f"{name}:{count}"
+            for name, count in self.counters.items()
+            if re.search(pattern, name))

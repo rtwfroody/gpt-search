@@ -170,14 +170,11 @@ class GptSearch(object):
         paragraphs = answer.splitlines()
         wrapped_paragraphs = [textwrap.wrap(p) for p in paragraphs]
         print("\n".join("\n".join(p) for p in wrapped_paragraphs))
-        print(f"({self.model})")
+        print(f"({self.llm.counter_string()})")
         print()
         print("Sources:")
         for source, title in sources:
             print(f"* [{title}]({source})")
-
-        #if args.verbose:
-        pprint(self.llm.get_counters())
 
 if __name__ == "__main__":
     gptSearch = GptSearch()
