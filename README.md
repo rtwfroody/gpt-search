@@ -53,7 +53,7 @@ Please be aware that this program can perform up to 5 GPT queries, which may hav
 
 ### gpt-3.5-turbo
 
-`$ ./gpt_search.py "News about ChatGPT."`
+`GptSearch:`
 ChatGPT, the AI language model developed by OpenAI, has been making waves in the tech world with its advanced capabilities. As previously reported, ChatGPT released experimental AI plugins on March 23, 2023, which allowed the AI to access portions of the internet and provided added functionality for its users.
 
 Recently, OpenAI announced its most advanced language model yet, GPT-4, which is currently only available in the ChatGPT Plus paid subscription and as an API for developers. Companies such as Duolingo, Be My Eyes, Stripe, and Khan Academy have already integrated GPT-4 into their applications and services.
