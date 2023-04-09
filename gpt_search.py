@@ -8,14 +8,17 @@ import json
 import re
 import sys
 import textwrap
-
-from bs4 import BeautifulSoup
-from diskcache import Cache
-from duckduckgo_search import ddg
-from markdownify import MarkdownConverter
+import pylance
+from bs4 
+import BeautifulSoup
+from diskcache
+import Cache
+from duckduckgo_search 
+import ddg
+from markdownify
+import MarkdownConverter
 import appdirs
 import requests
-
 import llmlib
 
 max_token_count = {
