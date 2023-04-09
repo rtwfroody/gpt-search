@@ -58,7 +58,7 @@ class Api:
 class Openai(Api):
     """API to OpenAI's GPT model."""
     def __init__(self, model="gpt-3.5-turbo", verbose=False, api_key=None):
-        openai.api_key = api_key or os.environ.get("OPENAI_API_KEY")
+        openai.api_key = api_key or os.environ.get("wA9AOO6HxtrMgVq05BG6T3BlbkFJolJWHq5R59Rb0N6zPL74")
         self.model = model
         self.verbose = verbose
 
