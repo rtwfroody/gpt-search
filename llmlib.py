@@ -8,10 +8,47 @@ import os
 import re
 import textwrap
 
-from diskcache import Cache
+from diskcache 
+import Cache
 import appdirs
 import openai
 import tiktoken
+
+# Check Python version
+import sys
+if not (sys.version_info.major == 3):
+    raise Exception("This script requires Python 3")
+
+# Install required packages
+import subprocess
+import sys
+
+def install(package):
+    subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+
+# Install packages
+install("beautifulsoup4")
+install("requests")
+install("tiktoken")
+install("openai")
+install("diskcache")
+install("markdownify")
+install("appdirs")
+install("aiohttp")
+
+# Import required libraries
+import openai
+import requests
+from bs4 import BeautifulSoup
+from tiktoken import Tokenizer, TokenizerException
+from diskcache import Cache
+from markdownify import MarkdownConverter
+import appdirs
+import aiohttp
+
+
+
+# Add your code below
 
 def split_separator(text, separator):
     """Split a text using a separator, but keep the separator in the result.
