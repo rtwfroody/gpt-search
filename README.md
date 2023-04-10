@@ -8,16 +8,19 @@ it, and then uses GPT to generate a response to the user's question.
 
 - Python 3
 - OpenAI API Key
-- BeautifulSoup
-- requests
-- tiktoken
 
 ## Installation
 
 To install the required packages, run:
 
 ```bash
-pip install duckduckgo-search openai beautifulsoup4 requests joblib tiktoken
+pip install duckduckgo-search openai beautifulsoup4 requests joblib tiktoken \
+		markdownify diskcache
+```
+
+To configure the OpanAI API Key, run:
+```bash
+export OPENAI_API_KEY="<api key>"
 ```
 
 ## Usage
